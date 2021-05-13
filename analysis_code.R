@@ -7,6 +7,8 @@ library("RCurl")
 csvfile <- getURL("https://raw.githubusercontent.com/harlanhappydog/BayesianSeroMetaAnalysis/main/IFRdata.csv")
 IFRdata <- read.csv(text = csvfile)
 
+MCMCn <- 1000000
+
 ##########################################
 ####  functions:
 summary_md_ci <- function(xx, samps){
@@ -50,7 +52,6 @@ g_IFR_9p = theta + theta1*(-1.041098);
 g_IFR_16p = theta + theta1*(0.1890347);  
 g_IFR_20p = theta + theta1*(0.6661173);  
 
-IFR_ <-  1 - exp(-exp(theta))
 IFR_9p <- 1 - exp(-exp(g_IFR_9p))  
 IFR_16p <- 1 - exp(-exp(g_IFR_16p))  
 IFR_20p <- 1 - exp(-exp(g_IFR_20p))  
@@ -64,9 +65,6 @@ predictIFR_20p <- 1 - exp(-exp(g_IFR_20p + tau*epsilon))
 
 ##########################################
 ### Fit model ###
-
-d_lower <- IFRdata$deaths14_lower
-d_upper <- IFRdata$deaths14_upper
 K <- length(IFRdata$total_tests)
 
 jags.modelIFR <- jags.model(textConnection(metaIFR), 
@@ -75,22 +73,21 @@ jags.modelIFR <- jags.model(textConnection(metaIFR),
     tests = IFRdata$total_tests,
     cc = IFRdata$total_cases,    
     pop = IFRdata$Population,
-    deaths_lower = apply(cbind(d_lower, d_upper), 1, min)-1,
-    deaths_upper = apply(cbind(d_lower, d_upper), 1, max),
+    deaths_lower = IFRdata$deaths14_lower-1,
+    deaths_upper = IFRdata$deaths14_upper,
     deaths = rep(NA, K),
     Z = c(scale(log(IFRdata$aged_65_older))),
     censor.index = rep(1, K)
     ), 
     n.chains = 5, 
     n.adapt = 5000,
-    inits = list(deaths = round(apply(cbind(d_lower, d_upper), 1, mean)))
-    )
+    inits = list(deaths = round(apply(cbind(IFRdata$deaths14_lower, IFRdata$deaths14_upper), 1, mean))))
 
 params <- c("IFR_9p", "predictIFR_9p", "IFR_16p", 
 		"predictIFR_16p", "IFR_20p", "predictIFR_20p", 
 		"icloglog_theta", "theta", "theta1", "ir", "ifr", "tau", "sigma")
 sampsIFR <- coda.samples(jags.modelIFR, params, 
-				n.iter = 1000000,  thin = 100, n.adapt = 100000)
+				n.iter = MCMCn,  thin = 100, n.adapt = round(MCMCn*0.10))
 
 
 # obtain posterior medians, HDP cred./pred. intervals:
@@ -106,6 +103,7 @@ results2 <- data.frame(modelparams2, t(apply(cbind(modelparams2), 1, 
 results1
 results2
 
+study_names <- IFRdata[,"Location"]
 
 # IR variables
 IRvars <- cbind(apply(cbind(1:K), 1, function(ii) paste("ir[",ii,"]", sep="")))
@@ -133,20 +131,12 @@ library("gridExtra")
 	
 	
 ####  organize results:
-study_names <- IFRdata[,"Location"]
-
-
-
-
 meta_IFR <- meta_IFR14[order(IFRdata$aged_65_older, IFRdata$Location),]
-
-
 
  world_wide<-results2[results2[,"modelparams2"]=="predictIFR_9p",-1] 
  	
  usa_wide<-results2[results2[,"modelparams2"]=="predictIFR_16p",-1]
 
- 
  eu_wide<-results2[results2[,"modelparams2"]=="predictIFR_20p",-1]
 
 
@@ -244,4 +234,3 @@ sero_plot <- grid.arrange(IFRplot_sero, IRplot_sero_noyaxis, ncol=2,widths=c(1
 
 # note: requires large plotting area
 sero_plot
-
