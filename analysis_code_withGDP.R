@@ -145,11 +145,11 @@ library("gridExtra")
 ####  organize results:
 meta_IFR <- meta_IFR14[order(IFRdata$aged_65_older, IFRdata$Location),]
 
- world_wide<-results2[results2[,"modelparams2"]=="IFR_9p",-1] 
+ world_wide<-results2[results2[,"modelparams2"]=="predictIFR_9p",-1] 
  	
- usa_wide<-results2[results2[,"modelparams2"]=="IFR_16p",-1]
+ usa_wide<-results2[results2[,"modelparams2"]=="predictIFR_16p",-1]
 
- eu_wide<-results2[results2[,"modelparams2"]=="IFR_20p",-1]
+ eu_wide<-results2[results2[,"modelparams2"]=="predictIFR_20p",-1]
 
 # exp(-1.313337*sd(log(IFRdata$GDPppp))+mean(log(IFRdata$GDPppp)))
 
@@ -187,8 +187,8 @@ preds <- meta_IFR_plus[meta_IFR_plus [,"Study"] %in%
                 "USA (65yo=16%, GDP(ppp)=65.3K)", 
                 "EU (65yo=20%, GDP(ppp)=47.8K)"), "IFR_labs"]
 
-#preds <- gsub("]", "}", preds, fixed=TRUE)
-#preds <- gsub("[", "{", preds, fixed=TRUE)
+preds <- gsub("]", "}", preds, fixed=TRUE)
+preds <- gsub("[", "{", preds, fixed=TRUE)
 
 meta_IFR_plus[meta_IFR_plus [,"Study"] %in% c("World (65yo=9%, GDP(ppp)=18.4K)", 
                 "USA (65yo=16%, GDP(ppp)=65.3K)", 
