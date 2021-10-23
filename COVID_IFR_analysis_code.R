@@ -11,7 +11,7 @@ library("ggplot2")
 library("gridExtra")
 library("plyr")
 
-MCMCn <- 1000000
+MCMCn <- 2000000
 
 ##########################################
 ####  functions:
@@ -134,8 +134,9 @@ predictIFR_20p <- 1 - exp(-exp(g_IFR_20p + tau*epsilon))
 
 # loading the data:
 
+sero <- read.csv("s_data_52.csv")
 econ2 <- read.csv("REGION_ECONOM_11082021015737664.csv")
-sero <- read.csv("s_data_51.csv")
+
 
 # merging the OECD GDP data with our seroprevalence dataset:
 
@@ -172,7 +173,7 @@ for(rr  in sero[sero[,c("oecd_region")]%in%c(2), "Region"]){
 
 }
 
-
+sero[,"GDP_OECD_original"] <- sero[,c("GDPppp")]
 sero[!is.na(sero[,"OECD_GDP"]), "OECD_GDP_source"] <- 1
 sero[is.na(sero[,"OECD_GDP"]), "OECD_GDP_source"] <- 0
 sero[is.na(sero[,"OECD_GDP"]),"OECD_GDP"] <- sero[is.na(sero[,"OECD_GDP"]),"GDPppp"]
@@ -201,7 +202,7 @@ IFRdata_chen <- sero_data[sero_data[,"Dataset_Chen"]==1,]
 
 ####  Making Table 1 and Table 2 ####
 
-look0 <- (IFRdata_chen[,c("Author", "Location", "Excluded", "Notes_exclusion", "Location", "Population",  "date_start", "date_end",   "IR_lower",  "IR_upper", "deaths14_lower", "deaths14_upper", "aged_65_older", "GDPppp", "Country", "Prevalence.Estimate.Name")])
+look0 <- (IFRdata_chen[,c("Author", "Location", "Excluded", "Notes_exclusion", "Location", "Population",  "date_start", "date_end",   "IR_lower",  "IR_upper", "deaths14_lower", "deaths14_upper", "aged_65_older", "GDPppp", "Country", "Prevalence.Estimate.Name", "Dataset_both", "death_data_quality")])
 
 look1<-(look0[look0[,"Excluded"]==0,])
 
@@ -247,10 +248,13 @@ look2[,"window"] <- apply(cbind(1:dim(look2)[1]), 1, function(qq) {paste(look2[q
 look2[,"IRinterval"] <-apply(cbind(1:dim(look2)[1]),1, function(qq) {paste("[",paste(sprintf("%.2f", look2[qq,c("IR_lower", "IR_upper")]), collapse=", "),"]", sep="")})
 
 
-look2[,"author_with_citation"] <- apply(cbind(1:dim(look2)[1]), 1, function(qq) { paste(look2[qq,c("Authors")], look2[qq,"Prevalence.Estimate.Name"], collapse="")})
+look2[,"author_with_citation"] <- apply(cbind(1:dim(look2)[1]), 1, function(qq) { paste(look2[qq,c("Authors")], "...", look2[qq,"Prevalence.Estimate.Name"], "...", collapse="")})
+
+look2[,"Dataset_both"][look2[,"Dataset_both"]==1]<-"yes"
+look2[,"Dataset_both"][look2[,"Dataset_both"]=="0"]<-""
 
 #Table 1
-print(xtable(look2[order(look2[,"Authors"]),][,c("author_with_citation", "study_names", "window", "IRinterval")], digits =c(rep(0,3), 2,2)), include.rownames=FALSE)
+print(xtable(look2[order(look2[,"Authors"]),][,c("author_with_citation", "study_names", "window", "IRinterval", "Dataset_both")], digits =c(rep(0,3), 2,2,1)), include.rownames=FALSE)
 
 #Table 2
 print(xtable(look2[order(look2[,"Authors"]),][,c("study_names", "Population",  "deaths14_lower" ,  "deaths14_upper", "total_tests", "total_cases", "aged_65_older", "GDPppp")], digits = 0), include.rownames=FALSE)
@@ -260,6 +264,11 @@ IFRdata <- look2
 
 K <- length(IFRdata$total_tests)
 K
+
+# For sensitivity analysis
+ IFRdata <- look2[look2[,"death_data_quality"]==1,]
+ K <- length(IFRdata$total_tests)
+ K
 
 #########
 
@@ -387,6 +396,8 @@ meta_IFR14[,"IFR_fitted"] <- apply(IFRdata[,c("aged_65_older", "GDPppp")],1, fun
 meta_IFR14
 
 
+meta_IR14
+
 ##########################################
 # Plotting
 ##########################################
@@ -400,9 +411,13 @@ library("gridExtra")
 	
 	
 ####  organize results:
-meta_IFR <- meta_IFR14[order(meta_IFR14[,"IFR_fitted"], IFRdata$Location),]
+meta_IFR <- meta_IFR14[order(meta_IFR14[,"IFR_fitted"], meta_IFR14[,"study_names"]),]
 meta_IFR
 
+
+####  organize results:
+meta_IR <- meta_IR14[order(meta_IFR14[,"IFR_fitted"], meta_IFR14[,"study_names"]),]
+meta_IR
 
  world_wide<-results2[results2[,"modelparams2"]=="IFR_9p",-1] 
  	
@@ -464,6 +479,23 @@ IFRplot_chen <- e + geom_text(aes(label=(meta_IFR_plus [,"IFR_labs"])), hj
 IFRplot_chen
 ##########################################
 
+## IR plot
+####  organize results:
+
+meta_IR_plus <- rbind(meta_IR)
+colnames(meta_IR_plus) <- c("Study","IR","lower","upper")
+meta_IR_plus<-droplevels(meta_IR_plus)
+
+a <- ggplot(meta_IR_plus, aes(x= Study, y=IR,ymax=upper,ymin=lower,size=5))+ ylab("Infection Rate (%)")+ xlab("")
+
+b <- a + geom_pointrange(size = 0.5, shape=c(rep(20, K)))
+
+cc <- b + coord_flip(ylim=c(0, 30))  + scale_x_discrete(limits = rev(unique(meta_IR_plus$Study)))
+
+#this puts in a dotted line at the point of group difference
+d <- cc
+e <- d + theme_bw()
+e
 
 ##############################
 ##############################
@@ -483,13 +515,13 @@ IFRdata_sero <- sero_data[sero_data[,"Dataset_Serotracker"]==1,]
 
 ####  Making Table 1 and Table 2 ####
 
-look0 <- (IFRdata_sero[,c("Author", "Location", "Excluded", "Notes_exclusion", "Location", "Population",  "date_start", "date_end",   "IR_lower",  "IR_upper", "deaths14_lower", "deaths14_upper", "aged_65_older", "GDPppp", "Country", "Prevalence.Estimate.Name")])
+look0 <- (IFRdata_sero[,c("Author", "Location", "Excluded", "Notes_exclusion", "Location", "Population",  "date_start", "date_end",   "IR_lower",  "IR_upper", "deaths14_lower", "deaths14_upper", "aged_65_older", "GDPppp", "Country", "Prevalence.Estimate.Name", "Dataset_both", "death_data_quality")])
 
 look1<-(look0[look0[,"Excluded"]==0,])
 
-look0 <- (IFRdata_sero[,c("Author", "Location", "Excluded", "Notes_exclusion", "Location", "Population",  "date_start", "date_end",   "IR_lower",  "IR_upper", "deaths14_lower", "deaths14_upper", "aged_65_older", "GDPppp", "Country", "Prevalence.Estimate.Name", "death_data_quality")])
+#look0 <- (IFRdata_sero[,c("Author", "Location", "Excluded", "Notes_exclusion", "Location", "Population",  "date_start", "date_end",   "IR_lower",  "IR_upper", "deaths14_lower", "deaths14_upper", "aged_65_older", "GDPppp", "Country", "Prevalence.Estimate.Name", "death_data_quality")])
 
-look1<-(look0[look0[,"Excluded"]==0 & look0[,"death_data_quality"]==1,])
+#look1<-(look0[look0[,"Excluded"]==0 & look0[,"death_data_quality"]==1,])
 
 
 excluded_studies<- look0[look0[,"Excluded"]==1,c("Author", "Location", "Notes_exclusion")]
@@ -529,10 +561,15 @@ look2[,"window"] <- apply(cbind(1:dim(look2)[1]), 1, function(qq) {paste(look2[q
 look2[,"IRinterval"] <-apply(cbind(1:dim(look2)[1]),1, function(qq) {paste("[",paste(sprintf("%.2f", look2[qq,c("IR_lower", "IR_upper")]), collapse=", "),"]", sep="")})
 
 
-look2[,"author_with_citation"] <- apply(cbind(1:dim(look2)[1]), 1, function(qq) { paste(look2[qq,c("Authors")], look2[qq,"Prevalence.Estimate.Name"], collapse="")})
+
+look2[,"author_with_citation"] <- apply(cbind(1:dim(look2)[1]), 1, function(qq) { paste(look2[qq,c("Authors")], "...", look2[qq,"Prevalence.Estimate.Name"], "...", collapse="")})
+
+look2[,"Dataset_both"][look2[,"Dataset_both"]==1]<-"yes"
+look2[,"Dataset_both"][look2[,"Dataset_both"]=="0"]<-""
 
 #Table 1
-print(xtable(look2[order(look2[,"Authors"]),][,c("author_with_citation", "study_names", "window", "IRinterval")], digits =c(rep(0,3), 2,2)), include.rownames=FALSE)
+print(xtable(look2[order(look2[,"Authors"]),][,c("author_with_citation", "study_names", "window", "IRinterval", "Dataset_both")], digits =c(rep(0,3), 2,2,1)), include.rownames=FALSE)
+
 
 #Table 2
 print(xtable(look2[order(look2[,"Authors"]),][,c("study_names", "Population",  "deaths14_lower" ,  "deaths14_upper", "total_tests", "total_cases", "aged_65_older", "GDPppp")], digits = 0), include.rownames=FALSE)
@@ -542,9 +579,13 @@ print(xtable(look2[order(look2[,"Authors"]),][,c("study_names", "Population",  "
 
 
 IFRdata <- look2
-
 K <- length(IFRdata$total_tests)
 K
+
+# For sensitivity analysis
+ IFRdata <- look2[look2[,"death_data_quality"]==1,]
+ K <- length(IFRdata$total_tests)
+ K
 
 #########
 
@@ -682,8 +723,12 @@ library("gridExtra")
 	
 	
 ####  organize results:
-meta_IFR <- meta_IFR14[order(meta_IFR14[,"IFR_fitted"], IFRdata$Location),]
+meta_IFR <- meta_IFR14[order(meta_IFR14[,"IFR_fitted"], meta_IFR14[,"study_names"]),]
 meta_IFR
+
+####  organize results:
+meta_IR <- meta_IR14[order(meta_IFR14[,"IFR_fitted"], meta_IFR14[,"study_names"]),]
+meta_IR
 
 
  world_wide<-results2[results2[,"modelparams2"]=="IFR_9p",-1] 
@@ -746,5 +791,23 @@ IFRplot_sero <- e + geom_text(aes(label=(meta_IFR_plus [,"IFR_labs"])), hj
 IFRplot_sero
 ##########################################
 
+##########################################
 
+## IR plot
+####  organize results:
 
+meta_IR_plus <- rbind(meta_IR)
+colnames(meta_IR_plus) <- c("Study","IR","lower","upper")
+meta_IR_plus<-droplevels(meta_IR_plus)
+
+a <- ggplot(meta_IR_plus, aes(x= Study, y=IR,ymax=upper,ymin=lower,size=5))+ ylab("Infection Rate (%)")+ xlab("")
+
+b <- a + geom_pointrange(size = 0.5, shape=c(rep(20, K)))
+
+cc <- b + coord_flip(ylim=c(0, 80))  + scale_x_discrete(limits = rev(unique(meta_IR_plus$Study)))
+
+#this puts in a dotted line at the point of group difference
+d <- cc
+e <- d + theme_bw()
+
+e
